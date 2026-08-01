@@ -13,7 +13,7 @@ namespace Elegist.Playtest
     /// One declarative action in, a series of screenshots out:
     ///
     ///     {"action":"key",   "key":"w", "seconds":3}
-    ///     {"action":"click", "x":960, "y":540}
+    ///     {"action":"click", "at":[960, 540]}
     ///     {"action":"scroll","notches":6}
     ///     {"action":"drag",  "from":[960,400], "to":[960,700], "seconds":0.4}
     ///     {"action":"wait",  "seconds":2}
@@ -91,10 +91,10 @@ namespace Elegist.Playtest
             public float x, y;
             public float fromX, fromY, toX, toY;
             public bool hasFrom;
-            /// <summary>How many pictures the caller wants from the middle of a
-            /// gesture. Left to the agent because only it knows whether it is
-            /// watching something move or just getting somewhere.</summary>
-            public int frames;
+            /// <summary>How many movements to break a drag into. NOT a picture
+            /// count — n steps photograph n-1 moments between them, and calling it
+            /// "frames" invited people to read it as "give me n pictures".</summary>
+            public int steps;
             /// <summary>How long to keep watching AFTER the input, and how often
             /// to sample while watching. Exposed because only the agent knows
             /// whether it just nudged something or set a long thing in motion.</summary>
@@ -167,7 +167,7 @@ namespace Elegist.Playtest
                         // either end. Break it into legs and shoot between them, so
                         // the agent sees the thing rotating rather than two stills
                         // that could equally be no movement at all.
-                        int legs = Mathf.Clamp(a.frames > 0 ? a.frames : 5, 1, 8);
+                        int legs = Mathf.Clamp(a.steps > 0 ? a.steps : 5, 1, 8);
                         float dur = a.seconds > 0.05f ? a.seconds : 0.5f;
                         for (int i = 0; i < legs; i++)
                         {
@@ -225,24 +225,31 @@ namespace Elegist.Playtest
             var last = frames[frames.Count - 1];
             var shots = new List<(string path, string caption)>();
 
+            // The sheet is the JOURNEY and the full-size picture is where it ended.
+            // They used to overlap — the final moment was paid for twice, once
+            // shrunk into the last cell and once at full size — so the last frame
+            // is left out of the sheet and the picture below it finishes the run.
             if (frames.Count > 1)
             {
+                int m = frames.Count - 1;
                 string sheet = System.IO.Path.Combine(dir, $"{_seq:000}_sequence.png");
-                System.IO.File.WriteAllBytes(sheet, PlaytestContactSheet.Compose(frames));
+                System.IO.File.WriteAllBytes(sheet,
+                    PlaytestContactSheet.Compose(frames.GetRange(0, m)));
 
                 var when = new StringBuilder();
-                for (int i = 0; i < times.Count; i++)
+                for (int i = 0; i < m; i++)
                     when.Append(i == 0 ? "" : ", ").Append($"{times[i]:0.0}s");
                 shots.Add((sheet,
-                    $"THE WHOLE ACTION, {frames.Count} frames in order — left to right then down, " +
-                    $"numbered 1-{frames.Count}. 1 is before it, {frames.Count} is after it. " +
-                    $"Taken at {when}. Read MOVEMENT off this; do not read positions off it."));
+                    $"HOW IT GOT THERE — the first {m} frame(s) of the action, in order, left " +
+                    $"to right then down, numbered 1-{m}. Frame 1 is before the action. " +
+                    $"Taken at {when}. The full-size picture below is the next and last frame, " +
+                    "so read the two together. Read MOVEMENT here; measure positions there."));
             }
 
             string now = System.IO.Path.Combine(dir, $"{_seq:000}_now.png");
             System.IO.File.WriteAllBytes(now, last.EncodeToPNG());
-            shots.Add((now, "THE SCREEN NOW, full size. Aim off this one — the numbers you " +
-                            "read here are the numbers to pass back."));
+            shots.Add((now, $"WHERE IT ENDED — the screen now, full size, at {times[times.Count - 1]:0.0}s. " +
+                            "Aim off this one; the numbers you read here are the numbers to pass back."));
 
             var sb = new StringBuilder("{");
             sb.Append("\"ok\": true, ");
@@ -370,11 +377,17 @@ namespace Elegist.Playtest
             a.key = Str(json, "key");
             a.seconds = Num(json, "seconds", Num(json, "durationInSeconds", 0f));
             a.notches = Mathf.RoundToInt(Num(json, "notches", 0f));
-            a.frames = Mathf.RoundToInt(Num(json, "frames", 0f));
+            a.steps = Mathf.RoundToInt(Num(json, "steps", 0f));
             a.watch = Num(json, "watch", 1.2f);
             a.fps = Num(json, "fps", 5f);
             a.x = Num(json, "x", 0f);
             a.y = Num(json, "y", 0f);
+
+            // A point is a point. Drag needs two of them so it takes [x,y] pairs,
+            // and an agent that has learned that shape should not have to learn a
+            // second one to click. "at" is the same thing spelled the same way.
+            var at = Pair(json, "at");
+            if (at.HasValue) { a.x = at.Value.x; a.y = at.Value.y; }
 
             // "keyPress" is accepted as a friendlier alias for {"action":"key"}.
             var kp = Str(json, "keyPress");

@@ -52,8 +52,8 @@ const TOOL = {
     '  {"action":"look"}                                  just look at the screen\n' +
     '  {"action":"key","key":"f"}                         tap a key\n' +
     '  {"action":"key","key":"w","seconds":3}             HOLD a key (sampled once a second)\n' +
-    '  {"action":"click","x":960,"y":540}                 click a screen position\n' +
-    '  {"action":"move","x":960,"y":540}                  move the cursor without clicking\n' +
+    '  {"action":"click","at":[960,540]}                  click a screen position\n' +
+    '  {"action":"move","at":[960,540]}                   move the cursor without clicking\n' +
     '  {"action":"scroll","notches":6}                    turn the wheel (+ in, - out)\n' +
     '  {"action":"drag","from":[960,400],"to":[960,700]}  press, drag, release\n' +
     '  {"action":"wait","seconds":2}                      let something finish\n\n' +
@@ -68,9 +68,13 @@ const TOOL = {
     "not a photograph taken half way through it.\n" +
     '  "watch": 3      wait up to 3s for a slow reaction (default 1.2, max 10)\n' +
     '  "fps": 10       sample more finely while watching (default 5, max 20)\n' +
-    '  "frames": 8     break a drag into more steps (max 8)\n' +
+    '  "steps": 8      break a drag into more movements (max 8)\n' +
     "Raise watch when something is still moving in the last cell. Raise fps when the " +
-    "cells jump and you want to see what happened between them.",
+    "cells jump and you want to see what happened between them.\n\n" +
+    "You do not choose how many pictures you get. Sampling is fixed by fps and watch; " +
+    "a sample only becomes a picture if the screen actually changed since the last one, " +
+    "and the run ends as soon as the screen goes still. So no sequence at all means " +
+    "nothing happened — which is usually the most important thing an action can tell you.",
   inputSchema: {
     type: "object",
     properties: {
@@ -81,12 +85,13 @@ const TOOL = {
       },
       key: { type: "string", description: 'Key name for "key", e.g. w, f, escape, space.' },
       seconds: { type: "number", description: "Hold/wait duration. A held key is sampled once a second." },
-      x: { type: "number", description: "Screen X for click/move. Origin bottom-left." },
-      y: { type: "number", description: "Screen Y for click/move. Origin bottom-left." },
+      at: { type: "array", items: { type: "number" }, description: "[x,y] for click/move. Origin bottom-left — the same shape as from/to." },
+      x: { type: "number", description: "Deprecated: X for click/move. Prefer at:[x,y]." },
+      y: { type: "number", description: "Deprecated: Y for click/move. Prefer at:[x,y]." },
       notches: { type: "number", description: "Wheel notches for scroll. Positive zooms in." },
       from: { type: "array", items: { type: "number" }, description: "[x,y] drag start." },
       to: { type: "array", items: { type: "number" }, description: "[x,y] drag end." },
-      frames: { type: "number", description: "How many steps to break a drag into (1-8). More = a denser sequence." },
+      steps: { type: "number", description: "How many movements to break a drag into (1-8). Not a picture count — n steps photograph the n-1 moments between them." },
       watch: { type: "number", description: "Seconds to keep filming after the action, waiting for the game to settle. Default 1.2, max 10. Raise it when the last cell is still moving." },
       fps: { type: "number", description: "Frames per second while watching. Default 5, max 20. Raise it to see what happened between cells." },
     },

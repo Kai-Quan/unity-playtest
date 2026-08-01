@@ -24,11 +24,17 @@ namespace Elegist.Playtest
     /// </summary>
     public static class PlaytestContactSheet
     {
-        /// <summary>Width of the finished sheet. Roughly one and a bit frames'
-        /// worth of pixels no matter how many cells go in it, which is the whole
-        /// economy: a six-frame gesture now costs less than the two stills it used
-        /// to be summarised by.</summary>
-        public const int SheetWidth = 1280;
+        /// <summary>Width of ONE cell. The sheet grows to fit rather than the cells
+        /// shrinking to fill, so a two-frame action costs two frames' worth of
+        /// tokens instead of the same as a nine-frame one. It also means cells are
+        /// always the same size, so an agent learns one visual scale instead of
+        /// re-guessing it every action.
+        ///
+        /// A quarter width is plenty to see a camera move, a panel open or an
+        /// object turn. It is NOT enough to read UI text — that is what the
+        /// full-size final picture is for, and splitting those two jobs is the
+        /// whole point of sending two pictures.</summary>
+        public const int CellWidth = 426;
 
         private const int Gutter = 5;
         private static readonly Color32 Ground = new Color32(24, 24, 28, 255);
@@ -41,7 +47,7 @@ namespace Elegist.Playtest
             int cols = n <= 3 ? n : Mathf.CeilToInt(Mathf.Sqrt(n));
             int rows = Mathf.CeilToInt(n / (float)cols);
 
-            int cellW = (SheetWidth - Gutter * (cols + 1)) / cols;
+            int cellW = CellWidth;
             int cellH = Mathf.Max(1, Mathf.RoundToInt(cellW * frames[0].height / (float)frames[0].width));
             int sheetW = cellW * cols + Gutter * (cols + 1);
             int sheetH = cellH * rows + Gutter * (rows + 1);
