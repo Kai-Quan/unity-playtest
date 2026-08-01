@@ -19,6 +19,13 @@ namespace Elegist.Playtest
     ///     {"action":"wait",  "seconds":2}
     ///     {"action":"look"}
     ///
+    /// EVERY ACTION IS FILMED, NOT SNAPSHOTTED. The input is the fast part; the
+    /// game's reaction to it is not. So after every action — not just the long
+    /// ones — this keeps photographing until the picture stops changing, and hands
+    /// back the whole run. `watch` sets how long it will wait for a slow reaction
+    /// and `fps` how finely it samples, because only the caller knows whether it
+    /// nudged something or set a long thing in motion.
+    ///
     /// EVERY ACTION ANSWERS IN TWO PICTURES. A contact sheet of the whole gesture
     /// — before it, during it, after it, numbered in order — and then the screen
     /// as it stands now, full size. Motion is a relationship between frames, and
@@ -57,6 +64,7 @@ namespace Elegist.Playtest
 
         public static string Begin(string json)
         {
+            PlaytestBridge.Ensure();
             if (PlaytestBridge.Instance == null)
                 return "{\"ok\":false,\"error\":\"not in play mode\"}";
             if (Running) return "{\"ok\":false,\"error\":\"an action is still running\"}";
@@ -87,7 +95,15 @@ namespace Elegist.Playtest
             /// gesture. Left to the agent because only it knows whether it is
             /// watching something move or just getting somewhere.</summary>
             public int frames;
+            /// <summary>How long to keep watching AFTER the input, and how often
+            /// to sample while watching. Exposed because only the agent knows
+            /// whether it just nudged something or set a long thing in motion.</summary>
+            public float watch = 1.2f;
+            public float fps = 5f;
         }
+
+        /// <summary>Nine cells is a 3x3 sheet, which is as many as stays legible.</summary>
+        private const int MaxFrames = 9;
 
         private static IEnumerator Run(Act a)
         {
@@ -120,7 +136,6 @@ namespace Elegist.Playtest
                     else
                     {
                         PlaytestBridge.Key(a.key);
-                        yield return Settle();
                     }
                     log.Append($"pressed '{a.key}'");
                     if (a.seconds > 0.05f) log.Append($" for {a.seconds:0.#}s");
@@ -130,22 +145,18 @@ namespace Elegist.Playtest
                     PlaytestBridge.MoveMouse(a.x * k, a.y * k);
                     yield return null;
                     PlaytestBridge.Click(a.x * k, a.y * k);
-                    yield return Settle();
+                    yield return WaitForInput();
                     log.Append($"clicked ({a.x:0}, {a.y:0})");
                     break;
 
                 case "move":
                     PlaytestBridge.MoveMouse(a.x * k, a.y * k);
-                    yield return new WaitForSecondsRealtime(0.15f);
                     log.Append($"moved the cursor to ({a.x:0}, {a.y:0})");
                     break;
 
                 case "scroll":
                     PlaytestBridge.Scroll(a.notches);
-                    yield return Settle();
-                    // The lens keeps easing after the wheel stops; wait for the
-                    // picture to stop changing or the shot is of a half-done zoom.
-                    yield return new WaitForSecondsRealtime(0.5f);
+                    yield return WaitForInput();
                     log.Append($"scrolled {a.notches} notch(es)");
                     break;
 
@@ -165,7 +176,7 @@ namespace Elegist.Playtest
                                 Mathf.Lerp(a.fromX, a.toX, s0) * k, Mathf.Lerp(a.fromY, a.toY, s0) * k,
                                 Mathf.Lerp(a.fromX, a.toX, s1) * k, Mathf.Lerp(a.fromY, a.toY, s1) * k,
                                 Mathf.Max(4, Mathf.RoundToInt(dur / legs * 60f)));
-                            yield return Settle();
+                            yield return WaitForInput();
                             if (i < legs - 1) yield return Capture(frames, times, t0);
                         }
                         log.Append($"dragged ({a.fromX:0},{a.fromY:0}) to ({a.toX:0},{a.toY:0})");
@@ -182,7 +193,7 @@ namespace Elegist.Playtest
                     break;
             }
 
-            yield return Capture(frames, times, t0);
+            yield return Watch(frames, times, t0, a.watch, a.fps);
 
             LastResult = Publish(frames, times, log.ToString());
             foreach (var f in frames) Object.Destroy(f);
@@ -248,16 +259,47 @@ namespace Elegist.Playtest
             return sb.ToString();
         }
 
-        private static IEnumerator Settle()
+        /// <summary>Wait for the injected gesture to finish being TYPED. StartCoroutine
+        /// runs a coroutine up to its first yield immediately, so Busy is already set
+        /// by the time the bridge call returns and this cannot race.</summary>
+        private static IEnumerator WaitForInput()
         {
-            // Wait for the gesture to START before waiting for it to end — the busy
-            // flag is not set on the frame the gesture is requested, so waiting only
-            // for "not busy" returns instantly and screenshots land mid-action.
-            float t = 0f;
-            while (t < 0.5f && !PlaytestBridge.Busy) { t += Time.unscaledDeltaTime; yield return null; }
-            t = 0f;
-            while (t < 5f && PlaytestBridge.Busy) { t += Time.unscaledDeltaTime; yield return null; }
-            yield return new WaitForSecondsRealtime(0.2f);
+            while (PlaytestBridge.Busy) yield return null;
+        }
+
+        /// <summary>Keep photographing until the game stops reacting.
+        ///
+        /// WHY THIS EXISTS. Waiting for the input to finish is not the same as
+        /// waiting for the game to finish. A click is over in four frames; the
+        /// camera move it triggers takes most of a second. Every "after" shot used
+        /// to be taken during that move, so an agent saw a camera part-way to
+        /// somewhere and concluded — reasonably — that nothing there was clickable.
+        ///
+        /// The stop condition costs nothing extra: Capture already refuses to add a
+        /// frame that looks like the one before it, so "no frame was added" IS "the
+        /// picture has stopped changing". Two of those in a row and we are done.
+        ///
+        /// It will not stop before the game has moved at all, or a click that takes
+        /// a moment to respond would be photographed only in the pause before it
+        /// does — which is the bug this fixes, arrived at from the other side.</summary>
+        private static IEnumerator Watch(List<Texture2D> frames, List<float> times,
+                                         float t0, float seconds, float fps)
+        {
+            seconds = Mathf.Clamp(seconds, 0f, 10f);
+            float step = 1f / Mathf.Clamp(fps, 1f, 20f);
+            bool moved = false;
+            int still = 0;
+
+            for (float t = 0f; t < seconds; t += step)
+            {
+                yield return new WaitForSecondsRealtime(step);
+
+                int had = frames.Count;
+                yield return Capture(frames, times, t0);
+
+                if (frames.Count > had) { moved = true; still = 0; }
+                else if (moved && ++still >= 2) yield break;
+            }
         }
 
         private static IEnumerator Capture(List<Texture2D> into, List<float> times, float t0)
@@ -267,27 +309,53 @@ namespace Elegist.Playtest
             var tex = PlaytestBridge.GrabFrame(PlaytestBridge.ScreenshotLongEdge);
             if (tex == null) yield break;
 
-            // Drop a frame identical to the one before it. Every cell an agent
+            // Drop a frame that looks like the one before it. Every cell an agent
             // receives costs context it could have spent playing longer, and a
             // duplicate teaches it nothing — "nothing changed" is better said once
             // in words than shown twice.
-            if (into.Count > 0 && SamePixels(into[into.Count - 1], tex))
+            if (into.Count > 0 && LooksSame(into[into.Count - 1], tex))
             {
                 Object.Destroy(tex);
                 yield break;
             }
+
+            // Past nine cells the sheet stops being legible. Forget the oldest
+            // MIDDLE frame rather than refusing new ones: the first and the latest
+            // are the two an agent actually reasons from.
+            if (into.Count >= MaxFrames)
+            {
+                Object.Destroy(into[1]);
+                into.RemoveAt(1);
+                times.RemoveAt(1);
+            }
+
             into.Add(tex);
             times.Add(Time.realtimeSinceStartup - t0);
         }
 
-        private static bool SamePixels(Texture2D a, Texture2D b)
+        /// <summary>Has the picture stopped changing?
+        ///
+        /// Not exact equality — an HDRP frame is never bit-identical twice running,
+        /// so an exact test says "still moving" forever and the sequence fills up
+        /// with six photographs of a stationary room. This samples every third
+        /// pixel and asks whether a tenth of a percent of them actually moved,
+        /// which ignores dithering and temporal noise while still catching anything
+        /// a person would see. It is a threshold on a subtraction, and calling it
+        /// computer vision would be flattering it.</summary>
+        private static bool LooksSame(Texture2D a, Texture2D b)
         {
             if (a == null || b == null || a.width != b.width || a.height != b.height) return false;
-            var pa = a.GetRawTextureData();
-            var pb = b.GetRawTextureData();
+            var pa = a.GetRawTextureData<byte>();
+            var pb = b.GetRawTextureData<byte>();
             if (pa.Length != pb.Length) return false;
-            for (int i = 0; i < pa.Length; i++) if (pa[i] != pb[i]) return false;
-            return true;
+
+            int looked = 0, differing = 0;
+            for (int i = 0; i < pa.Length; i += 9)
+            {
+                looked++;
+                if (Mathf.Abs(pa[i] - pb[i]) > 8) differing++;
+            }
+            return differing * 1000 < looked;
         }
 
         // ── tiny JSON reader ────────────────────────────────────────────
@@ -303,6 +371,8 @@ namespace Elegist.Playtest
             a.seconds = Num(json, "seconds", Num(json, "durationInSeconds", 0f));
             a.notches = Mathf.RoundToInt(Num(json, "notches", 0f));
             a.frames = Mathf.RoundToInt(Num(json, "frames", 0f));
+            a.watch = Num(json, "watch", 1.2f);
+            a.fps = Num(json, "fps", 5f);
             a.x = Num(json, "x", 0f);
             a.y = Num(json, "y", 0f);
 

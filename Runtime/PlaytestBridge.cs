@@ -57,8 +57,14 @@ namespace Elegist.Playtest
         private Vector2 _cursor;
         private string _lastScreenshot = "";
 
+        /// <summary>Make sure the bridge exists. Called once at scene load, and
+        /// again by anything that needs it — because a SCRIPT RECOMPILE DURING PLAY
+        /// MODE reloads the domain and destroys this object, and the runtime-init
+        /// hook does not fire a second time. Without this the game looks like it is
+        /// still running while every command answers "not in play mode", and the
+        /// only cure anyone finds is restarting the game.</summary>
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
-        private static void Bootstrap()
+        public static void Ensure()
         {
             if (Instance != null) return;
             var go = new GameObject("~PlaytestBridge");

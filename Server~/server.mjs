@@ -62,7 +62,15 @@ const TOOL = {
     "arithmetic. (Do not measure off the sequence sheet; its cells are shrunk.) " +
     "There is no way to address anything by name, on purpose: if you cannot see it, " +
     "you cannot click it, and that is the point.\n\n" +
-    'Add "frames":N to a drag to ask for a denser sequence, up to 8.',
+    "EVERY ACTION IS FILMED. The input is the fast part; what the game does about " +
+    "it is not. After each action the camera keeps rolling until the picture stops " +
+    "changing, so a click that starts a slow camera move gives you the whole move, " +
+    "not a photograph taken half way through it.\n" +
+    '  "watch": 3      wait up to 3s for a slow reaction (default 1.2, max 10)\n' +
+    '  "fps": 10       sample more finely while watching (default 5, max 20)\n' +
+    '  "frames": 8     break a drag into more steps (max 8)\n' +
+    "Raise watch when something is still moving in the last cell. Raise fps when the " +
+    "cells jump and you want to see what happened between them.",
   inputSchema: {
     type: "object",
     properties: {
@@ -79,6 +87,8 @@ const TOOL = {
       from: { type: "array", items: { type: "number" }, description: "[x,y] drag start." },
       to: { type: "array", items: { type: "number" }, description: "[x,y] drag end." },
       frames: { type: "number", description: "How many steps to break a drag into (1-8). More = a denser sequence." },
+      watch: { type: "number", description: "Seconds to keep filming after the action, waiting for the game to settle. Default 1.2, max 10. Raise it when the last cell is still moving." },
+      fps: { type: "number", description: "Frames per second while watching. Default 5, max 20. Raise it to see what happened between cells." },
     },
     required: ["action"],
   },
