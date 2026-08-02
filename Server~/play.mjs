@@ -48,7 +48,10 @@ PLAY — the player's eyes. Needs the game running; "start" starts it.
   sequence plus the final frame. NO SEQUENCE MEANS NOTHING HAPPENED.
   "watch":3 waits longer for a slow reaction; "fps":10 samples more finely.
 
-INSPECT — the developer's camera. EDIT MODE ONLY; stop the game first.
+INSPECT — the developer's camera. Works in edit mode and during play; in play it
+shows the live scene, which is the only way to see where something instantiated at
+runtime ended up. NOT FOR PLAYTESTING: it sees through walls, and a report is only
+worth anything if it came from someone who could not.
   {"tool":"inspect","action":"look"}
   {"tool":"inspect","action":"turn","yaw":30,"pitch":-10}     look around
   {"tool":"inspect","action":"pan","right":1,"forward":2}     slide, angle kept

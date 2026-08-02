@@ -105,8 +105,11 @@ const INSPECT_TOOL = {
     "Look at the scene with the DEVELOPER's camera — the counterpart to `play`, " +
     "which is the player's. Use it to answer staging questions: does this float, " +
     "does it intersect, is it the right size, is it where I think it is.\n\n" +
-    "EDIT MODE ONLY. It refuses while the game is running, on purpose — a flying " +
-    "camera would let a playtest see what a player cannot.\n\n" +
+    "Works in edit mode AND during play. In play it shows the LIVE scene, which is " +
+    "the only way to see where something instantiated at runtime actually ended up.\n\n" +
+    "NOT FOR PLAYTESTING. If you have been asked to play as a first-time player " +
+    "would, do not use this — it sees through walls and around corners, and the only " +
+    "thing your report is worth comes from being unable to.\n\n" +
     '  {"action":"look"}                                shoot from where you are\n' +
     '  {"action":"turn","yaw":30,"pitch":-10}           look around, camera stays put\n' +
     '  {"action":"pan","right":1,"up":0.5,"forward":2}  slide, angle unchanged\n' +

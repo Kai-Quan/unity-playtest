@@ -10,12 +10,18 @@ namespace Elegist.Playtest.EditorTools
     /// The DEVELOPER's camera, as a tool an agent can drive — the counterpart to
     /// `play`, which is the player's.
     ///
-    /// WHY IT REFUSES DURING PLAY MODE. The playtester's entire value is that it
-    /// cannot see what a player cannot see; a flying camera would destroy that, and
-    /// a rule in its brief saying "do not use inspect" is a rule that can be
-    /// forgotten. The playtester lives in play mode and this lives outside it, so
-    /// the two can never overlap. Staging questions — does it float, does it
-    /// intersect, is it the right size — are edit-mode questions anyway.
+    /// IT WORKS DURING PLAY MODE TOO, and that is deliberate. An earlier version
+    /// refused, on the theory that the playtester must never be able to fly and a
+    /// structural block beats an instruction. That was the wrong trade: half of
+    /// what a developer needs to look at only EXISTS while the game is running —
+    /// anything instantiated at runtime is simply not in the edit-mode scene — and
+    /// those are exactly the hardest questions to answer another way. Blocking them
+    /// cost a real capability to defend against a hypothetical one.
+    ///
+    /// The playtester is kept out by its own brief instead, which is the right
+    /// layer: who may use a tool is a fact about an agent, not about the tool. It
+    /// already declines to read code, specs and object names — far richer cheating,
+    /// and far easier — so one more line costs nothing.
     ///
     ///     {"action":"look"}                                 shoot from where you are
     ///     {"action":"turn","yaw":30,"pitch":-10}            look around, camera stays put
@@ -24,6 +30,10 @@ namespace Elegist.Playtest.EditorTools
     ///     {"action":"frame","target":"Organ","yaw":35}      one object, one angle
     ///     {"action":"orbit","target":"Organ","angles":4}    ring around it, one sheet
     ///     {"action":"plan","from":"top","target":"Desk"}    orthographic plan/elevation
+    ///
+    /// During play mode it shows the LIVE scene, so it answers where a runtime
+    /// instance actually ended up — a question the edit-mode scene cannot even be
+    /// asked.
     ///
     /// SEVEN VERBS RATHER THAN THREE WITH PARAMETERS, because a capability nobody
     /// can see is a capability nobody has. Turning and strafing were both possible
@@ -47,10 +57,6 @@ namespace Elegist.Playtest.EditorTools
         public static string Run(string json)
         {
             _brighten = PlaytestJson.Num(json, "brighten", 1f) > 0.5f;
-            if (EditorApplication.isPlaying)
-                return Fail("inspect is an edit-mode tool — stop play mode first. While the " +
-                            "game is running, use `play` and look with the player's eyes.");
-
             var view = SceneView.lastActiveSceneView;
             if (view == null)
                 return Fail("no Scene View is open in the editor, and nothing here can open one. " +
