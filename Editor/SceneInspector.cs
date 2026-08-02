@@ -46,7 +46,9 @@ namespace Elegist.Playtest.EditorTools
                             "game is running, use `play` and look with the player's eyes.");
 
             var view = SceneView.lastActiveSceneView;
-            if (view == null) return Fail("no Scene View is open in the editor.");
+            if (view == null)
+                return Fail("no Scene View is open in the editor, and nothing here can open one. " +
+                            "Ask whoever is at the machine for the Scene tab, then try again.");
 
             switch (PlaytestJson.Str(json, "action") ?? "look")
             {
@@ -199,12 +201,28 @@ namespace Elegist.Playtest.EditorTools
         {
             go = null; bounds = default; error = null;
             string target = PlaytestJson.Str(json, "target");
-            if (string.IsNullOrEmpty(target)) { error = Fail("this needs a \"target\"."); return false; }
+            if (string.IsNullOrEmpty(target))
+            {
+                error = Fail("frame, orbit and plan need a \"target\" — an object name like " +
+                             "\"Desk\", or a path like \"Room/Env/Desk\". Use \"look\", \"turn\" or " +
+                             "\"pan\" to move about without naming anything.");
+                return false;
+            }
 
             go = Locate(target);
-            if (go == null) { error = Fail($"found nothing matching '{target}'."); return false; }
+            if (go == null)
+            {
+                error = Fail($"found nothing matching '{target}'. It is tried as a full path, then " +
+                             "an exact name, then any substring, including inactive objects — so a " +
+                             "shorter fragment is more likely to hit, not less.");
+                return false;
+            }
             if (!TryBounds(go, out bounds))
-            { error = Fail($"'{go.name}' has no renderers, so there is nothing to look at."); return false; }
+            {
+                error = Fail($"'{go.name}' has no renderers anywhere beneath it, so there is nothing " +
+                             "to look at. It is probably a grouping object — try one of its children.");
+                return false;
+            }
 
             view.pivot = bounds.center;
             view.size = Mathf.Max(0.05f, bounds.extents.magnitude *

@@ -24,10 +24,52 @@ import { tmpdir } from "node:os";
 const DIR = process.env.UNITY_PLAYTEST_DIR ?? join(tmpdir(), "unity-playtest");
 await mkdir(DIR, { recursive: true });
 
+const USAGE = `Drive a running Unity game, and see what happened.
+
+  node play.mjs '<json>'
+
+Two tools share this script. Every call prints picture paths — OPEN THEM, they
+are the answer; the text is only a label.
+
+PLAY — the player's eyes. Needs the game running; "start" starts it.
+  {"action":"start"}                        run the game (answers once it is up)
+  {"action":"stop"}                         leave play mode
+  {"action":"look"}                         look at the screen
+  {"action":"key","key":"e"}                tap a key ("seconds":3 to hold)
+  {"action":"click","at":[480,270]}         click where you saw something
+  {"action":"move","at":[480,270]}          move the cursor without clicking
+  {"action":"scroll","notches":6}           turn the wheel (+ is in)
+  {"action":"drag","from":[x,y],"to":[x,y]} press, drag, release
+  {"action":"wait","seconds":2}             let something finish
+
+  Coordinates are in the PICTURE's own pixels, origin bottom-left — read a
+  position off the full-size picture and pass those exact numbers.
+  Every action is filmed until the screen stops changing, so you get a numbered
+  sequence plus the final frame. NO SEQUENCE MEANS NOTHING HAPPENED.
+  "watch":3 waits longer for a slow reaction; "fps":10 samples more finely.
+
+INSPECT — the developer's camera. EDIT MODE ONLY; stop the game first.
+  {"tool":"inspect","action":"look"}
+  {"tool":"inspect","action":"turn","yaw":30,"pitch":-10}     look around
+  {"tool":"inspect","action":"pan","right":1,"forward":2}     slide, angle kept
+  {"tool":"inspect","action":"zoom","by":1}                   each step halves the field
+  {"tool":"inspect","action":"frame","target":"Desk"}         one object, one angle
+  {"tool":"inspect","action":"orbit","target":"Desk","angles":4}
+  {"tool":"inspect","action":"plan","from":"top","target":"Desk"}
+
+  ORBIT is usually what you want: whatever hides a thing from here is exactly
+  what you cannot see past, so one angle cannot answer "show me this object".
+  PLAN is orthographic — the only way to settle whether two things are touching,
+  because perspective is what makes that unanswerable. from: top front back
+  left right iso. Anything nearer than the target is clipped, so a wall between
+  you and it never becomes the picture.
+
+Requires the Unity editor open. Nothing here can open it for you.`;
+
 const raw = process.argv[2];
-if (!raw) {
-  console.error('need an action, e.g. \'{"action":"look"}\'');
-  process.exit(1);
+if (!raw || raw === "--help" || raw === "-h") {
+  console.log(USAGE);
+  process.exit(raw ? 0 : 1);
 }
 
 let action;
