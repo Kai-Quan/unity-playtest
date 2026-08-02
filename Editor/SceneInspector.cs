@@ -39,8 +39,14 @@ namespace Elegist.Playtest.EditorTools
 
         private static int _seq;
 
+        /// <summary>Lift the exposure of every capture so a dark scene can still be
+        /// measured. Off with {"brighten":0} when the lighting itself is the thing
+        /// being judged.</summary>
+        private static bool _brighten = true;
+
         public static string Run(string json)
         {
+            _brighten = PlaytestJson.Num(json, "brighten", 1f) > 0.5f;
             if (EditorApplication.isPlaying)
                 return Fail("inspect is an edit-mode tool — stop play mode first. While the " +
                             "game is running, use `play` and look with the player's eyes.");
@@ -133,23 +139,66 @@ namespace Elegist.Playtest.EditorTools
             float from = PlaytestJson.Num(json, "yaw", 0f);
             view.orthographic = false;
 
+            // KEEP THE CAMERA IN THE ROOM. Half a ring around a desk that stands
+            // against a wall puts the camera outside the building, and clipping the
+            // wall away leaves the shell rendering as a black slab — two wasted
+            // cells out of four, which is what this returned on its first real use.
+            // Pulling in until the eye is back inside the scene's own shell frames
+            // tighter but always shows something.
+            // Inset, because the scene's bounds INCLUDE the walls — an eye that is
+            // merely inside them can still be buried in one, which is how an angle
+            // came back as a flat rectangle of wallpaper.
+            Bounds room = SceneBounds();
+            room.Expand(-1.2f);
+            float wanted = view.size;
+
             var frames = new List<Texture2D>();
             var yaws = new StringBuilder();
+            int blank = 0, blocked = 0;
             for (int i = 0; i < angles; i++)
             {
                 float yaw = from + i * (360f / angles);
                 view.rotation = Quaternion.Euler(pitch, yaw, 0f);
-                frames.Add(Capture(view, Cut(view, b)));
-                yaws.Append(i == 0 ? "" : ", ").Append($"{Mathf.Repeat(yaw, 360f):0}°");
+
+                view.size = wanted;
+                while (view.size > wanted * 0.5f && !room.Contains(Eye(view)))
+                    view.size *= 0.8f;
+
+                // Half as far back still shows the object; a quarter shows one
+                // corner of it very large, which reads as an answer and is not one.
+                // If it cannot get indoors without going closer than that, the angle
+                // is not available and saying so beats faking it.
+                if (!room.Contains(Eye(view))) { blocked++; continue; }
+
+                var shot = Capture(view, Cut(view, b));
+
+                // A cell of nothing costs as much as a cell of something. If the
+                // angle came back empty anyway, say so in words instead.
+                if (IsBlank(shot)) { Object.DestroyImmediate(shot); blank++; continue; }
+
+                frames.Add(shot);
+                yaws.Append(yaws.Length == 0 ? "" : ", ").Append($"{Mathf.Repeat(yaw, 360f):0}°");
             }
+            view.size = wanted;
+
+            if (frames.Count == 0)
+                return Fail($"none of the {angles} angles worked — {go.name} is enclosed, with no " +
+                            "room to stand back from it on any side. Try `plan`, which cuts a " +
+                            "section instead of walking around, or `frame` with an explicit yaw.");
 
             string sheet = Write("orbit", PlaytestContactSheet.Compose(frames, CellWidth));
             foreach (var f in frames) Object.DestroyImmediate(f);
 
-            return Publish(sheet, $"{go.name} FROM {angles} ANGLES, numbered 1-{angles}, left to " +
-                                  $"right then down — yaw {yaws}, pitch {pitch:0}°. {Size(b)}. " +
-                                  "Anything nearer than the object is cut away, so a wall behind " +
-                                  "you never becomes the picture.");
+            return Publish(sheet, $"{go.name} FROM {frames.Count} ANGLE(S), numbered 1-{frames.Count}, " +
+                                  $"left to right then down — yaw {yaws}, pitch {pitch:0}°. {Size(b)}. " +
+                                  "Anything nearer than the object is cut away, so a wall behind you " +
+                                  "never becomes the picture." +
+                                  (blank + blocked > 0
+                                      ? $" {blank + blocked} further angle(s) dropped: the object is " +
+                                        "against something on that side, so there is no room to stand " +
+                                        "back and look at it from there. Try `plan`, which cuts a " +
+                                        "section instead of walking around."
+                                      : ""));
         }
 
         /// <summary>Orthographic plan and elevations — the draughtsman's views.
@@ -287,8 +336,10 @@ namespace Elegist.Playtest.EditorTools
             RenderTexture.active = rt;
             var tex = new Texture2D(W, H, TextureFormat.RGB24, false);
             tex.ReadPixels(new Rect(0, 0, W, H), 0, 0);
-            tex.Apply();
             RenderTexture.active = prevActive;
+
+            if (_brighten) Lift(tex);
+            tex.Apply();
 
             cam.targetTexture = null;
             RenderTexture.ReleaseTemporary(rt);
@@ -318,6 +369,85 @@ namespace Elegist.Playtest.EditorTools
                 : view.size / Mathf.Sin(view.camera.fieldOfView * 0.5f * Mathf.Deg2Rad);
 
         private static float Wrap(float degrees) => degrees > 180f ? degrees - 360f : degrees;
+
+        /// <summary>Stretch the picture so its brightest real content reaches near
+        /// white.
+        ///
+        /// A MEASURING TOOL MUST NOT DEPEND ON THE ART BEING LIT. This room is a
+        /// night scene lit by one oil lamp: a side elevation of a pale score against
+        /// a warm wall reads, and the same shot of a dark object against a dark wall
+        /// is a black rectangle that answers nothing. The geometry was always there;
+        /// only the exposure was wrong.
+        ///
+        /// Done on the pixels rather than in the render, deliberately — every
+        /// alternative (a headlight, an unlit replacement shader, a debug display
+        /// mode) means knowing which render pipeline this package is installed in,
+        /// and it is supposed to work in any of them. It only ever brightens, so a
+        /// well-exposed shot passes through untouched.</summary>
+        private static void Lift(Texture2D tex)
+        {
+            var px = tex.GetRawTextureData<byte>();
+
+            // The brightest few pixels are usually a lamp or a specular hit, and
+            // scaling to those leaves everything else as dark as it started. Aim at
+            // the 98th percentile instead — the brightest real SURFACE.
+            var histogram = new int[256];
+            for (int i = 0; i < px.Length; i += 3)
+                histogram[Mathf.Max(px[i], Mathf.Max(px[i + 1], px[i + 2]))]++;
+
+            int total = px.Length / 3, seen = 0, top = 255;
+            for (int v = 255; v >= 0; v--)
+            {
+                seen += histogram[v];
+                if (seen > total * 0.02f) { top = v; break; }
+            }
+            if (top >= 235 || top < 4) return;   // already exposed, or nothing there
+
+            float gain = 235f / top;
+            for (int i = 0; i < px.Length; i++)
+                px[i] = (byte)Mathf.Min(255f, px[i] * gain);
+        }
+
+        /// <summary>Did this angle come back with nothing IN it?
+        ///
+        /// The test is featurelessness, not darkness. The first version asked
+        /// whether the frame was dark, and duly caught the black cells — then
+        /// passed a flat pink rectangle, which was the camera pressed against a
+        /// wall and just as useless. What makes a picture worth a cell is variation;
+        /// a single flat colour is nothing whatever its brightness.
+        ///
+        /// Judged BEFORE the lift, or an empty frame gets brightened into
+        /// convincing noise and buys itself a cell.</summary>
+        private static bool IsBlank(Texture2D tex)
+        {
+            var px = tex.GetRawTextureData<byte>();
+
+            long sum = 0;
+            int looked = 0;
+            for (int i = 0; i < px.Length; i += 33) { sum += px[i]; looked++; }
+            float mean = sum / (float)looked;
+
+            int varied = 0;
+            for (int i = 0; i < px.Length; i += 33)
+                if (Mathf.Abs(px[i] - mean) > 12f) varied++;
+
+            return varied < looked * 0.05f;
+        }
+
+        /// <summary>The whole scene's extent — for an interior, the building shell.
+        /// Used to keep an orbiting camera indoors.</summary>
+        private static Bounds SceneBounds()
+        {
+            Bounds all = default;
+            bool any = false;
+            foreach (var r in Object.FindObjectsByType<Renderer>(
+                         FindObjectsInactive.Exclude, FindObjectsSortMode.None))
+            {
+                if (!any) { all = r.bounds; any = true; }
+                else all.Encapsulate(r.bounds);
+            }
+            return any ? all : new Bounds(Vector3.zero, Vector3.one * 100f);
+        }
 
         /// <summary>Where to put the near clip plane so nothing in front of the
         /// subject survives — a section cut, the way a plan drawing makes one.
