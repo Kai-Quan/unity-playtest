@@ -80,6 +80,19 @@ namespace Elegist.Playtest
 
         public static string Result() => Running ? "running" : LastResult;
 
+        /// <summary>Abandon whatever is in flight.
+        ///
+        /// `Running` is cleared at the end of the coroutine, so anything that kills
+        /// the coroutine instead — leaving play mode mid-action, the bridge object
+        /// being destroyed — leaves it stuck true forever, and every later command
+        /// is refused with "an action is still running". The editor half calls this
+        /// when it gives up waiting.</summary>
+        public static void Abandon(string why)
+        {
+            Running = false;
+            LastResult = "{\"ok\": false, \"error\": \"" + PlaytestJson.Escape(why) + "\"}";
+        }
+
         // ── the action ──────────────────────────────────────────────────
 
         private class Act

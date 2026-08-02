@@ -44,6 +44,17 @@ namespace Elegist.Playtest.EditorTools
         private const string SeenKey = "elegist.playtest.lastSeen";
 
         private static string _servingId;
+        private static double _servingSince;
+
+        // NOTHING MAY WAIT FOREVER. Both waiting states here — a job in flight, and
+        // a start that spans a domain reload — used to have no way out, so anything
+        // that killed the coroutine (leaving play mode mid-action, an exception)
+        // wedged the bridge permanently: it stopped reading commands at all, and the
+        // only cure was restarting the editor. A dead action that ANSWERS is a bad
+        // afternoon; one that goes silent costs whoever is driving it their session.
+        private const double JobDeadline = 90.0;
+        private const double StartDeadline = 300.0;
+        private const string PendingSinceKey = "elegist.playtest.pendingSince";
 
         private static string LastSeen
         {
@@ -55,6 +66,18 @@ namespace Elegist.Playtest.EditorTools
         {
             Directory.CreateDirectory(Dir);
             EditorApplication.update += Tick;
+            EditorApplication.playModeStateChanged += OnPlayModeChanged;
+        }
+
+        /// <summary>Leaving play mode kills any coroutine mid-action, so the caller
+        /// is owed an answer now rather than in ninety seconds. The deadline stays
+        /// as the backstop for everything this does not catch.</summary>
+        private static void OnPlayModeChanged(PlayModeStateChange change)
+        {
+            if (change != PlayModeStateChange.ExitingPlayMode || _servingId == null) return;
+            PlaytestAction.Abandon("play mode was stopped while this action was running.");
+            Write(_servingId, PlaytestAction.Result());
+            _servingId = null;
         }
 
         private static void Tick()
@@ -65,7 +88,17 @@ namespace Elegist.Playtest.EditorTools
             string resuming = SessionState.GetString(PendingKey, "");
             if (resuming != "")
             {
+                if (Overdue(PendingSinceKey, StartDeadline))
+                {
+                    SessionState.EraseString(PendingKey);
+                    PlaytestAction.Abandon(
+                        "the game was asked to start but never came up. It may still be loading, or " +
+                        "play mode may have been stopped while it did. Try again.");
+                    Write(resuming, PlaytestAction.Result());
+                    return;
+                }
                 if (!EditorApplication.isPlaying || EditorApplication.isCompiling) return;
+                EditorApplication.ExecuteMenuItem("Window/General/Game");
                 if (PlaytestAction.Begin("{\"action\":\"look\"}") != "running") return;
                 SessionState.EraseString(PendingKey);
                 _servingId = resuming;
@@ -75,7 +108,13 @@ namespace Elegist.Playtest.EditorTools
             // A result is pending: publish it the moment the action finishes.
             if (_servingId != null)
             {
-                if (PlaytestAction.Running) return;
+                if (PlaytestAction.Running)
+                {
+                    if (EditorApplication.timeSinceStartup - _servingSince < JobDeadline) return;
+                    PlaytestAction.Abandon(
+                        $"the action was still running after {JobDeadline:0}s and was abandoned. " +
+                        "Play mode was probably stopped while it ran. The bridge is listening again.");
+                }
                 Write(_servingId, PlaytestAction.Result());
                 _servingId = null;
                 return;
@@ -111,6 +150,7 @@ namespace Elegist.Playtest.EditorTools
                         // Answer AFTER the reload, not now — "the game is starting"
                         // is not a useful reply to an agent that wants to see it.
                         SessionState.SetString(PendingKey, id);
+                        SessionState.SetFloat(PendingSinceKey, (float)EditorApplication.timeSinceStartup);
                         EditorApplication.isPlaying = true;
                         return;
                     }
@@ -131,9 +171,27 @@ namespace Elegist.Playtest.EditorTools
                 return;
             }
 
+            // BRING THE GAME VIEW FORWARD FIRST. Screenshots wait on
+            // WaitForEndOfFrame, which in the editor only fires while the Game view
+            // is actually rendering — so with the Scene tab in front, every play
+            // action hangs at its first capture and never returns. Using `inspect`
+            // brings the Scene tab forward, so the two tools were quietly disabling
+            // each other: inspect once, and `play` stopped answering.
+            EditorApplication.ExecuteMenuItem("Window/General/Game");
+
             string started = PlaytestAction.Begin(action);
             if (started != "running") { Write(id, started); return; }
             _servingId = id;
+            _servingSince = EditorApplication.timeSinceStartup;
+        }
+
+        /// <summary>Has a stamped wait outlived its deadline? Missing stamp counts
+        /// as overdue — a wait nobody can date is a wait nobody can end, which is
+        /// precisely the state this exists to break.</summary>
+        private static bool Overdue(string key, double seconds)
+        {
+            float since = SessionState.GetFloat(key, -1f);
+            return since < 0f || EditorApplication.timeSinceStartup - since > seconds;
         }
 
         /// <summary>An installed package lives at a path nobody can guess — under
