@@ -352,7 +352,18 @@ namespace Elegist.Playtest
         /// playtester needs to read.</summary>
         public static Texture2D Resize(Texture2D src, int w, int h)
         {
-            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32);
+            // LINEAR, NOT DEFAULT. A screenshot is already sRGB-encoded display
+            // pixels; the only thing wanted here is a resample. A default render
+            // texture in a linear-space project converts on write, so the resize
+            // silently applied a gamma curve and every screenshot came back with
+            // its shadows lifted — a night scene lit by one lamp photographed as an
+            // evenly-lit room, which is a lie about the game, and worse, a lie an
+            // agent judging the art has no way to detect.
+            //
+            // The contact sheet resamples a second time to fill its cells, so the
+            // sheet was getting it twice.
+            var rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32,
+                                                RenderTextureReadWrite.Linear);
             var prev = RenderTexture.active;
             Graphics.Blit(src, rt);
             RenderTexture.active = rt;
