@@ -368,7 +368,14 @@ namespace Elegist.Playtest
             Graphics.Blit(src, rt);
             RenderTexture.active = rt;
 
-            var dst = new Texture2D(w, h, TextureFormat.RGB24, false);
+            // `linear: true` — the LABEL has to match the contents, or the next
+            // thing that samples this texture converts it again. These bytes are
+            // finished display pixels, and Unity's own screen capture is flagged
+            // the same way; leaving the default said "this is sRGB, convert it",
+            // so resizing a resized frame darkened it a second time. The full-size
+            // frame is resized once and looked right, the contact sheet cells are
+            // resized twice and came back nearly black.
+            var dst = new Texture2D(w, h, TextureFormat.RGB24, false, true);
             dst.ReadPixels(new Rect(0, 0, w, h), 0, 0);
             dst.Apply();
 
