@@ -99,6 +99,53 @@ const TOOL = {
   },
 };
 
+const INSPECT_TOOL = {
+  name: "inspect",
+  description:
+    "Look at the scene with the DEVELOPER's camera — the counterpart to `play`, " +
+    "which is the player's. Use it to answer staging questions: does this float, " +
+    "does it intersect, is it the right size, is it where I think it is.\n\n" +
+    "EDIT MODE ONLY. It refuses while the game is running, on purpose — a flying " +
+    "camera would let a playtest see what a player cannot.\n\n" +
+    '  {"action":"look"}                                shoot from where you are\n' +
+    '  {"action":"turn","yaw":30,"pitch":-10}           look around, camera stays put\n' +
+    '  {"action":"pan","right":1,"up":0.5,"forward":2}  slide, angle unchanged\n' +
+    '  {"action":"zoom","by":1}                         closer (negative backs off)\n' +
+    '  {"action":"frame","target":"Desk","yaw":35}      one object, one angle\n' +
+    '  {"action":"orbit","target":"Desk","angles":4}    a ring of angles, one sheet\n' +
+    '  {"action":"plan","from":"top","target":"Desk"}   orthographic, no perspective\n\n' +
+    "ORBIT is usually what you want. Whatever stands in front of a thing from here " +
+    "is exactly what you cannot see past, and you do not know it is there until you " +
+    "have moved — so one angle cannot answer 'show me this object'.\n\n" +
+    "PLAN is how you settle whether two things are touching. Perspective is what " +
+    "makes that unanswerable from any normal angle; an orthographic top view " +
+    "answers it in one picture. `from` takes top, front, back, left, right, iso.\n\n" +
+    "Anything nearer to the camera than the target is clipped away, so a wall " +
+    "between you and the subject never becomes the picture. `target` matches a " +
+    "full path, then an exact name, then any substring, including inactive objects.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["look", "turn", "pan", "zoom", "frame", "orbit", "plan"],
+        description: "What to do.",
+      },
+      target: { type: "string", description: "Object to look at, for frame/orbit/plan." },
+      yaw: { type: "number", description: "Degrees clockwise. Turns the camera, or sets the first angle of an orbit." },
+      pitch: { type: "number", description: "Degrees down from level. Positive looks down." },
+      right: { type: "number", description: "Metres to slide right (pan)." },
+      up: { type: "number", description: "Metres to slide up (pan)." },
+      forward: { type: "number", description: "Metres to slide forward (pan)." },
+      by: { type: "number", description: "Zoom steps; each one halves the field." },
+      angles: { type: "number", description: "How many angles in an orbit (1-8, default 4)." },
+      margin: { type: "number", description: "Framing room around the target. >1 pulls back, default 1.6." },
+      from: { type: "string", description: "Plan direction: top, front, back, left, right, iso." },
+    },
+    required: ["action"],
+  },
+};
+
 // ── talking to Unity ────────────────────────────────────────────────────
 
 async function run(action) {
@@ -186,15 +233,19 @@ process.stdin.on("data", async (chunk) => {
           serverInfo: { name: "dear-suspect-playtest", version: "1.0.0" },
         });
       } else if (msg.method === "tools/list") {
-        reply(msg.id, { tools: [TOOL] });
+        reply(msg.id, { tools: [TOOL, INSPECT_TOOL] });
       } else if (msg.method === "tools/call") {
-        if (msg.params?.name !== "play") {
+        const name = msg.params?.name;
+        if (name !== "play" && name !== "inspect") {
           reply(msg.id, {
-            content: [{ type: "text", text: `unknown tool '${msg.params?.name}'` }],
+            content: [{ type: "text", text: `unknown tool '${name}'` }],
             isError: true,
           });
         } else {
-          const result = await run(msg.params.arguments ?? { action: "look" });
+          // Both tools share one transport; the `tool` field is what Unity routes
+          // on, so an inspect call is a play call wearing a label.
+          const args = msg.params.arguments ?? { action: "look" };
+          const result = await run(name === "inspect" ? { ...args, tool: "inspect" } : args);
           reply(msg.id, { content: await toContent(result), isError: !result.ok });
         }
       } else if (msg.id !== undefined && msg.id !== null) {

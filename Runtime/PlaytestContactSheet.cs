@@ -41,13 +41,18 @@ namespace Elegist.Playtest
         private static readonly Color32 Ink = new Color32(255, 255, 255, 255);
         private static readonly Color32 Plate = new Color32(0, 0, 0, 255);
 
-        public static byte[] Compose(IReadOnlyList<Texture2D> frames)
+        public static byte[] Compose(IReadOnlyList<Texture2D> frames) => Compose(frames, CellWidth);
+
+        /// <summary>Same sheet at a chosen cell size. A playtest sequence answers
+        /// "did it move", which survives being small; an inspection sheet answers
+        /// "is that gap real", which does not.</summary>
+        public static byte[] Compose(IReadOnlyList<Texture2D> frames, int cellWidth)
         {
             int n = frames.Count;
             int cols = n <= 3 ? n : Mathf.CeilToInt(Mathf.Sqrt(n));
             int rows = Mathf.CeilToInt(n / (float)cols);
 
-            int cellW = CellWidth;
+            int cellW = Mathf.Max(64, cellWidth);
             int cellH = Mathf.Max(1, Mathf.RoundToInt(cellW * frames[0].height / (float)frames[0].width));
             int sheetW = cellW * cols + Gutter * (cols + 1);
             int sheetH = cellH * rows + Gutter * (rows + 1);

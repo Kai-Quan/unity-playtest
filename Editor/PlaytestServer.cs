@@ -94,6 +94,15 @@ namespace Elegist.Playtest.EditorTools
             string action = Object(text, "action");
             if (string.IsNullOrEmpty(action)) action = "{\"action\":\"look\"}";
 
+            // Two tools share one transport. `inspect` answers immediately — it is
+            // a camera move and a render, not a gesture that plays out over frames —
+            // so it never becomes a pending job.
+            if (Field(action, "tool") == "inspect")
+            {
+                Write(id, SceneInspector.Run(action));
+                return;
+            }
+
             switch (Field(action, "action"))
             {
                 case "start":
