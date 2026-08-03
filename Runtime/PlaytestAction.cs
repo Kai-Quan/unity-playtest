@@ -62,6 +62,17 @@ namespace Elegist.Playtest
 
         private static int _seq;
 
+        /// <summary>Stamped once per run and prefixed to every filename.
+        ///
+        /// `_seq` is a plain static, and Unity reloads the domain on entering play
+        /// mode, on leaving it, and on every script recompile — so it silently
+        /// returns to zero while the output directory is never cleared. Two runs
+        /// then both write 001_sequence.png to the same path and the second wins:
+        /// a valid PNG, at exactly the path it promised, of somebody else's
+        /// session. Nothing about that looks wrong at any point. A stamp costs six
+        /// characters and removes the whole class.</summary>
+        private static string _runStamp;
+
         public static string Begin(string json)
         {
             PlaytestBridge.Ensure();
@@ -71,6 +82,10 @@ namespace Elegist.Playtest
 
             var a = Parse(json);
             if (a == null) return "{\"ok\":false,\"error\":\"could not parse action\"}";
+
+            string bad = Validate(a);
+            if (bad != null)
+                return "{\"ok\":false,\"error\":\"" + PlaytestJson.Escape(bad) + "\"}";
 
             Running = true;
             LastResult = "";
@@ -93,6 +108,55 @@ namespace Elegist.Playtest
             LastResult = "{\"ok\": false, \"error\": \"" + PlaytestJson.Escape(why) + "\"}";
         }
 
+        private static readonly string[] Actions =
+            { "look", "key", "click", "move", "scroll", "drag", "wait" };
+
+        /// <summary>Refuse what we cannot do, rather than doing something else.
+        ///
+        /// Two silent-wrong-answer bugs lived here, and both produced bug reports
+        /// filed against the GAME:
+        ///
+        /// An unrecognised action fell through the switch below to `looked`, so a
+        /// mis-cased {"action":"Click"} returned a valid picture of an unchanged
+        /// screen and reported success. The honest reading of that evidence is
+        /// "the thing is not clickable", which is a defect that does not exist.
+        ///
+        /// A missing or malformed "at" parsed to (0,0) and reported `clicked
+        /// (0, 0)` — byte-identical to the output of the LEAKED VIRTUAL DEVICE
+        /// failure documented in PlaytestServer.Status, where every click lands in
+        /// the corner while keys keep working. Same six characters, two unrelated
+        /// remedies, and the device reading has already cost a whole session's
+        /// misdiagnosis. An argument we can check is not allowed to imitate a
+        /// hardware fault we cannot.</summary>
+        private static string Validate(Act a)
+        {
+            if (System.Array.IndexOf(Actions, a.action) < 0)
+                return $"'{a.action}' is not an action. Names are lower-case and exact: " +
+                       string.Join(", ", Actions) +
+                       ". (start, stop and status are answered before this point.) Nothing was done.";
+
+            if (a.action == "click" || a.action == "move")
+            {
+                if (!a.hasAt)
+                    return a.action + " needs \"at\":[x,y] — two numbers in the full-size " +
+                           "picture's own pixels, origin bottom-left, e.g. \"at\":[480,270]. " +
+                           "Nothing was done.";
+
+                float k = ShotToScreen();
+                float w = Screen.width / k, h = Screen.height / k;
+                if (a.x < 0f || a.y < 0f || a.x > w || a.y > h)
+                    return $"({a.x:0},{a.y:0}) is outside the {w:0}x{h:0} picture. Read the " +
+                           "position off the FULL-SIZE frame, never off a contact-sheet tile — " +
+                           "tile pixels are about a third the size, so tile numbers look valid " +
+                           "and land in the lower-left corner. Nothing was done.";
+            }
+
+            if (a.action == "drag" && !a.hasFrom)
+                return "drag needs BOTH \"from\":[x,y] and \"to\":[x,y]. Nothing was done.";
+
+            return null;
+        }
+
         // ── the action ──────────────────────────────────────────────────
 
         private class Act
@@ -102,6 +166,11 @@ namespace Elegist.Playtest
             public float seconds;
             public int notches;
             public float x, y;
+            /// <summary>Whether a position was actually GIVEN, as opposed to
+            /// defaulting to (0,0). See Validate — the origin is also what a dead
+            /// input device produces, so silence there is indistinguishable from
+            /// a hardware fault.</summary>
+            public bool hasAt;
             public float fromX, fromY, toX, toY;
             public bool hasFrom;
             /// <summary>How many movements to break a drag into. NOT a picture
@@ -201,6 +270,9 @@ namespace Elegist.Playtest
                     log.Append($"waited {a.seconds:0.#}s");
                     break;
 
+                // Only "look" reaches here now. This used to be the landing place
+                // for every unrecognised verb too, which is why a typo reported a
+                // successful look — see Validate.
                 default:
                     log.Append("looked");
                     break;
@@ -233,6 +305,8 @@ namespace Elegist.Playtest
 
             string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "playtest");
             System.IO.Directory.CreateDirectory(dir);
+            if (string.IsNullOrEmpty(_runStamp))
+                _runStamp = System.DateTime.Now.ToString("HHmmss");
             _seq++;
 
             var last = frames[frames.Count - 1];
@@ -245,7 +319,7 @@ namespace Elegist.Playtest
             if (frames.Count > 1)
             {
                 int m = frames.Count - 1;
-                string sheet = System.IO.Path.Combine(dir, $"{_seq:000}_sequence.png");
+                string sheet = System.IO.Path.Combine(dir, $"{_runStamp}_{_seq:000}_sequence.png");
                 System.IO.File.WriteAllBytes(sheet,
                     PlaytestContactSheet.Compose(frames.GetRange(0, m)));
 
@@ -259,7 +333,7 @@ namespace Elegist.Playtest
                     "so read the two together. Read MOVEMENT here; measure positions there."));
             }
 
-            string now = System.IO.Path.Combine(dir, $"{_seq:000}_now.png");
+            string now = System.IO.Path.Combine(dir, $"{_runStamp}_{_seq:000}_now.png");
             System.IO.File.WriteAllBytes(now, last.EncodeToPNG());
             shots.Add((now, $"WHERE IT ENDED — the screen now, full size, at {times[times.Count - 1]:0.0}s. " +
                             "Aim off this one; the numbers you read here are the numbers to pass back."));
@@ -393,14 +467,20 @@ namespace Elegist.Playtest
             a.steps = Mathf.RoundToInt(Num(json, "steps", 0f));
             a.watch = Num(json, "watch", 1.2f);
             a.fps = Num(json, "fps", 5f);
-            a.x = Num(json, "x", 0f);
-            a.y = Num(json, "y", 0f);
+            // NaN as the sentinel, not 0 — the whole point is telling "you asked
+            // for the origin" apart from "you asked for nothing".
+            float legacyX = Num(json, "x", float.NaN);
+            float legacyY = Num(json, "y", float.NaN);
+            if (!float.IsNaN(legacyX) && !float.IsNaN(legacyY))
+            {
+                a.x = legacyX; a.y = legacyY; a.hasAt = true;
+            }
 
             // A point is a point. Drag needs two of them so it takes [x,y] pairs,
             // and an agent that has learned that shape should not have to learn a
             // second one to click. "at" is the same thing spelled the same way.
             var at = Pair(json, "at");
-            if (at.HasValue) { a.x = at.Value.x; a.y = at.Value.y; }
+            if (at.HasValue) { a.x = at.Value.x; a.y = at.Value.y; a.hasAt = true; }
 
             // "keyPress" is accepted as a friendlier alias for {"action":"key"}.
             var kp = Str(json, "keyPress");

@@ -49,6 +49,7 @@ const TOOL = {
     "Actions:\n" +
     '  {"action":"start"}                                 run the game (answers once it is up)\n' +
     '  {"action":"stop"}                                  leave play mode\n' +
+    '  {"action":"status"}                                is it running? is it busy? no screenshot\n' +
     '  {"action":"look"}                                  just look at the screen\n' +
     '  {"action":"key","key":"f"}                         tap a key\n' +
     '  {"action":"key","key":"w","seconds":3}             HOLD a key (sampled once a second)\n' +
@@ -80,7 +81,7 @@ const TOOL = {
     properties: {
       action: {
         type: "string",
-        enum: ["start", "stop", "look", "key", "click", "move", "scroll", "drag", "wait"],
+        enum: ["start", "stop", "status", "look", "key", "click", "move", "scroll", "drag", "wait"],
         description: "What to do.",
       },
       key: { type: "string", description: 'Key name for "key", e.g. w, f, escape, space.' },
@@ -149,11 +150,67 @@ const INSPECT_TOOL = {
   },
 };
 
+const SNAPSHOT_TOOL = {
+  name: "snapshot",
+  description:
+    "The scene as NUMBERS — the twin of `inspect`, which is the scene as pictures. " +
+    "Records a subtree's transforms and which mesh each object wears, so a layout a " +
+    "human edits by hand can be read, reviewed and committed.\n\n" +
+    "A SNAPSHOT IS A RECORD, NEVER AN INSTRUCTION. Nothing here writes to the " +
+    "scene. The file is how you find a coordinate without asking, how a commit " +
+    "shows what moved, and how a fresh clone has something to rebuild from.\n\n" +
+    '  {"root":"ExpeditionProto","out":"workbench/x/staging.json"}\n' +
+    '  {"action":"diff","root":"ExpeditionProto","out":"workbench/x/staging.json"}\n\n' +
+    "DIFF FIRST when you come back to a scene someone else has been editing. It " +
+    "reports only what moved, was added or was deleted since the file was written, " +
+    "which is the question you actually have — re-reading two hundred lines of " +
+    "coordinates is not.\n\n" +
+    "Refuses during play mode, unlike `inspect`. In play, every transform is " +
+    "whatever the game has done to it since — doors open, items in hand — and a " +
+    "snapshot of that would look correct and be wrong.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["write", "diff"],
+        description: "write records the scene to the file; diff reports what has changed since. Default write.",
+      },
+      root: {
+        type: "string",
+        description: "Object whose subtree to record, e.g. \"ExpeditionProto\". Required.",
+      },
+      out: {
+        type: "string",
+        description:
+          "Path of the snapshot file, to write or to compare against. Required. " +
+          "A relative path resolves against the UNITY PROJECT folder, not the repo " +
+          "root — so a workbench beside it is \"../workbench/x/staging.json\". " +
+          "Absolute paths are taken as given.",
+      },
+    },
+    required: ["root", "out"],
+  },
+};
+
 // ── talking to Unity ────────────────────────────────────────────────────
 
 async function run(action) {
   const id = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
-  await writeFile(CMD, JSON.stringify({ id, action }), "utf8");
+  try {
+    await writeFile(CMD, JSON.stringify({ id, action }), "utf8");
+  } catch (e) {
+    // One command file, one writer. Batching independent tool calls is standard
+    // practice everywhere else, and here it races two writers onto this path.
+    if (e.code === "EBUSY" || e.code === "EPERM") {
+      return {
+        ok: false,
+        error: "another action is already in flight. This tool is one-at-a-time — " +
+               "send actions sequentially, never as parallel tool calls — then retry.",
+      };
+    }
+    throw e;
+  }
 
   const deadline =
     Date.now() + (action?.action === "start" ? START_TIMEOUT_MS : TIMEOUT_MS);
@@ -236,19 +293,19 @@ process.stdin.on("data", async (chunk) => {
           serverInfo: { name: "dear-suspect-playtest", version: "1.0.0" },
         });
       } else if (msg.method === "tools/list") {
-        reply(msg.id, { tools: [TOOL, INSPECT_TOOL] });
+        reply(msg.id, { tools: [TOOL, INSPECT_TOOL, SNAPSHOT_TOOL] });
       } else if (msg.method === "tools/call") {
         const name = msg.params?.name;
-        if (name !== "play" && name !== "inspect") {
+        if (name !== "play" && name !== "inspect" && name !== "snapshot") {
           reply(msg.id, {
             content: [{ type: "text", text: `unknown tool '${name}'` }],
             isError: true,
           });
         } else {
-          // Both tools share one transport; the `tool` field is what Unity routes
-          // on, so an inspect call is a play call wearing a label.
+          // All three tools share one transport; the `tool` field is what Unity
+          // routes on, so an inspect call is a play call wearing a label.
           const args = msg.params.arguments ?? { action: "look" };
-          const result = await run(name === "inspect" ? { ...args, tool: "inspect" } : args);
+          const result = await run(name === "play" ? args : { ...args, tool: name });
           reply(msg.id, { content: await toContent(result), isError: !result.ok });
         }
       } else if (msg.id !== undefined && msg.id !== null) {

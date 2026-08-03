@@ -48,6 +48,7 @@ namespace Elegist.Playtest.EditorTools
         private const int CellWidth = 640;
 
         private static int _seq;
+        private static string _runStamp;
 
         /// <summary>Lift the exposure of every capture so a dark scene can still be
         /// measured. Off with {"brighten":0} when the lighting itself is the thing
@@ -236,10 +237,17 @@ namespace Elegist.Playtest.EditorTools
                 case "left": view.rotation = Quaternion.Euler(0f, 90f, 0f); break;
                 case "right": view.rotation = Quaternion.Euler(0f, 270f, 0f); break;
                 case "iso": view.rotation = Quaternion.Euler(30f, 45f, 0f); break;
-                default:
-                    from = "top";
+                case "top":
                     view.rotation = Quaternion.Euler(89.9f, 0f, 0f);   // 90 flat is gimbal-ambiguous
                     break;
+                // An unrecognised direction used to fall back to top in silence.
+                // "bottom" is the value anyone invents first, and it returned the
+                // exact OPPOSITE view, captioned confidently as a top view — so
+                // "does this clip through the floor?" got a plausible wrong answer.
+                default:
+                    return Fail($"'{from}' is not a plan direction. Use one of: top, front, back, " +
+                                "left (or side), right, iso. There is no bottom view — read a top " +
+                                "view as its mirror, or use front/back for a section.");
             }
             float near = reach > 0f ? Mathf.Max(0.01f, Distance(view) - reach) : 0f;
 
@@ -258,9 +266,14 @@ namespace Elegist.Playtest.EditorTools
             string target = PlaytestJson.Str(json, "target");
             if (string.IsNullOrEmpty(target))
             {
-                error = Fail("frame, orbit and plan need a \"target\" — an object name like " +
+                // NOT plan — Plan() only calls Aim when a target is present, and
+                // targetless plan is the whole-scene orthographic view, which is
+                // the most useful layout tool in here. Naming it in this refusal
+                // talked people out of the one thing they should reach for.
+                error = Fail("frame and orbit need a \"target\" — an object name like " +
                              "\"Desk\", or a path like \"Room/Env/Desk\". Use \"look\", \"turn\" or " +
-                             "\"pan\" to move about without naming anything.");
+                             "\"pan\" to move about without naming anything, or \"plan\" with no " +
+                             "target for an orthographic view of the whole scene.");
                 return false;
             }
 
@@ -290,8 +303,15 @@ namespace Elegist.Playtest.EditorTools
             var tex = Capture(view, near);
             string path = Write("view", tex.EncodeToPNG());
             Object.DestroyImmediate(tex);
+            // Say when the picture has been processed. The lift is on by default and
+            // was documented only in a private field's docstring, so anyone judging
+            // LIGHTING off an inspect capture — briefing the artist, say — was
+            // reading a brightened image with nothing on screen admitting it.
             return Publish(path, what + $" — looking at {view.pivot.ToString("0.00")} from " +
-                                        $"{Eye(view).ToString("0.00")}.");
+                                        $"{Eye(view).ToString("0.00")}." +
+                                        (_brighten
+                                            ? " Exposure lifted so it can be measured; send \"brighten\":0 to judge the real lighting."
+                                            : " Exposure NOT lifted — this is the scene's own brightness."));
         }
 
         /// <summary>Render the Scene View camera at a FIXED size, so the result does
@@ -514,7 +534,14 @@ namespace Elegist.Playtest.EditorTools
         {
             string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "playtest");
             System.IO.Directory.CreateDirectory(dir);
-            string path = System.IO.Path.Combine(dir, $"{++_seq:000}_{label}.png");
+            // Stamped per run, for the reason spelled out on PlaytestAction._runStamp:
+            // `_seq` is a plain static, a domain reload resets it, and this directory
+            // is never cleared — so 001_view.png from an edit-mode capture was being
+            // overwritten by a play-mode one at the same path, both of them valid
+            // pictures of the same room with nothing to tell them apart.
+            if (string.IsNullOrEmpty(_runStamp))
+                _runStamp = System.DateTime.Now.ToString("HHmmss");
+            string path = System.IO.Path.Combine(dir, $"{_runStamp}_{++_seq:000}_{label}.png");
             System.IO.File.WriteAllBytes(path, png);
             return path;
         }

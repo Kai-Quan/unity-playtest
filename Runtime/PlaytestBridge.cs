@@ -93,6 +93,26 @@ namespace Elegist.Playtest
             InputSystem.settings.editorInputBehaviorInPlayMode =
                 InputSettings.EditorInputBehaviorInPlayMode.AllDeviceInputAlwaysGoesToGameView;
 #endif
+            // SWEEP OUR OWN OLD DEVICES FIRST. A script recompile during play
+            // reloads the domain: this component dies and `_mouse` goes with it,
+            // but the Input System PERSISTS its device list across that reload —
+            // so a bare AddDevice here leaks one mouse and one keyboard per
+            // recompile. They accumulate silently (one session reached ~190),
+            // and past some point `Mouse.current` resolves to one of the dead
+            // ones, whose position never updates. The symptom is the nastiest
+            // kind: screenshots keep arriving and KEYS still work, so the
+            // harness looks alive, while every click reads its position as
+            // (0,0) and lands in the corner. Diagnosed as "the bridge cannot
+            // click"; it can, until enough recompiles have piled up.
+            var stale = new List<InputDevice>();
+            foreach (var d in InputSystem.devices)
+                if (d.name == "PlaytestMouse" || d.name == "PlaytestKeyboard")
+                    stale.Add(d);
+            foreach (var d in stale) InputSystem.RemoveDevice(d);
+            if (stale.Count > 0)
+                Debug.Log($"[PlaytestBridge] swept {stale.Count} leaked virtual device(s) " +
+                          "from earlier domain reloads.");
+
             // Named devices so they're identifiable in the Input Debugger, and
             // so we never fight over the real hardware's state.
             _mouse = InputSystem.AddDevice<Mouse>("PlaytestMouse");
@@ -106,6 +126,24 @@ namespace Elegist.Playtest
             if (_mouse != null && _mouse.added) InputSystem.RemoveDevice(_mouse);
             if (_keyboard != null && _keyboard.added) InputSystem.RemoveDevice(_keyboard);
             if (Instance == this) Instance = null;
+        }
+
+        /// <summary>How many of OUR virtual devices the Input System currently
+        /// holds. More than one of either means domain reloads have stranded the
+        /// earlier ones — past a few dozen, <c>Mouse.current</c> resolves to a
+        /// dead device whose position never updates and every click lands at
+        /// (0,0), while keys keep working. Lives here rather than in the editor
+        /// server because this assembly is the one that references the Input
+        /// System; the server just asks.</summary>
+        public static void CountVirtualDevices(out int mice, out int keyboards)
+        {
+            mice = 0;
+            keyboards = 0;
+            foreach (var d in InputSystem.devices)
+            {
+                if (d.name == "PlaytestMouse") mice++;
+                else if (d.name == "PlaytestKeyboard") keyboards++;
+            }
         }
 
         // ── Input injection ─────────────────────────────────────────────────

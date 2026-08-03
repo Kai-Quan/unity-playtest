@@ -102,6 +102,14 @@ namespace Elegist.Playtest.EditorTools
                 if (PlaytestAction.Begin("{\"action\":\"look\"}") != "running") return;
                 SessionState.EraseString(PendingKey);
                 _servingId = resuming;
+                // STAMP THE CLOCK. _servingSince is a plain static, so the domain
+                // reload this start just crossed has reset it to 0 — and the job
+                // deadline below is `timeSinceStartup - _servingSince`, which
+                // against 0 is however long the EDITOR has been open. Miss this
+                // line and the very next tick judges the first screenshot
+                // ~thousands of seconds overdue and abandons it instantly, so
+                // EVERY start reports failure while the game is up and healthy.
+                _servingSince = EditorApplication.timeSinceStartup;
                 return;
             }
 
@@ -111,9 +119,17 @@ namespace Elegist.Playtest.EditorTools
                 if (PlaytestAction.Running)
                 {
                     if (EditorApplication.timeSinceStartup - _servingSince < JobDeadline) return;
+                    // Say what is KNOWN, not what is guessed. This used to assert
+                    // "play mode was probably stopped while it ran", which sent
+                    // whoever read it looking at the game — and it was wrong every
+                    // time, because the real cause was an unstamped clock here.
+                    // A confident wrong diagnosis costs more than no diagnosis.
                     PlaytestAction.Abandon(
                         $"the action was still running after {JobDeadline:0}s and was abandoned. " +
-                        "Play mode was probably stopped while it ran. The bridge is listening again.");
+                        (EditorApplication.isPlaying
+                            ? "The game IS still running — send {\"action\":\"look\"} to see it. "
+                            : "Play mode is no longer running. ") +
+                        "The bridge is listening again.");
                 }
                 Write(_servingId, PlaytestAction.Result());
                 _servingId = null;
@@ -133,17 +149,37 @@ namespace Elegist.Playtest.EditorTools
             string action = Object(text, "action");
             if (string.IsNullOrEmpty(action)) action = "{\"action\":\"look\"}";
 
-            // Two tools share one transport. `inspect` answers immediately — it is
-            // a camera move and a render, not a gesture that plays out over frames —
-            // so it never becomes a pending job.
+            // Three tools share one transport. `inspect` and `snapshot` both answer
+            // immediately — one is a camera move and a render, the other is a walk
+            // of the hierarchy — so neither ever becomes a pending job.
             if (Field(action, "tool") == "inspect")
             {
                 Write(id, SceneInspector.Run(action));
                 return;
             }
 
+            if (Field(action, "tool") == "snapshot")
+            {
+                Write(id, SceneSnapshot.Run(action));
+                return;
+            }
+
             switch (Field(action, "action"))
             {
+                // ASK THE BRIDGE WHAT IT THINKS IS TRUE. Handled before the
+                // is-playing guard below, because "is the game even running?" is
+                // exactly the question you have when nothing is working.
+                //
+                // This exists because two separate bugs were diagnosable in one
+                // call and instead took a code read plus a controlled experiment:
+                // `stop` reports success before it stops (it must — the domain
+                // reload would eat a later answer), and `start` used to fail while
+                // the game was up and healthy. Neither is visible from the outside
+                // without this.
+                case "status":
+                    Write(id, Status());
+                    return;
+
                 case "start":
                     if (!EditorApplication.isPlaying)
                     {
@@ -183,6 +219,61 @@ namespace Elegist.Playtest.EditorTools
             if (started != "running") { Write(id, started); return; }
             _servingId = id;
             _servingSince = EditorApplication.timeSinceStartup;
+        }
+
+        /// <summary>What the bridge believes about itself, in one answer.
+        ///
+        /// Reports the LEAKED VIRTUAL DEVICE COUNT deliberately: a script
+        /// recompile during play reloads the domain, which kills the bridge
+        /// component while the Input System PERSISTS its device list, so each
+        /// recompile used to strand another PlaytestMouse. Past a few dozen,
+        /// `Mouse.current` resolves to a dead one whose position never updates
+        /// and every click silently lands at (0,0) — while keys keep working, so
+        /// it reads as a coordinate problem. That cost a whole session's
+        /// misdiagnosis ("the bridge cannot click"). One number here would have
+        /// named it immediately.</summary>
+        private static string Status()
+        {
+            Elegist.Playtest.PlaytestBridge.CountVirtualDevices(out int mice, out int keebs);
+
+            bool pending = SessionState.GetString(PendingKey, "") != "";
+            string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+
+            string note =
+                EditorApplication.isCompiling ? "compiling — commands will queue until it finishes" :
+                pending ? "a start is in flight across the domain reload" :
+                _servingId != null ? "an action is in flight" :
+                // NO DOUBLE QUOTES IN ANY OF THESE. They land inside a JSON string
+                // that is assembled by hand below; a raw quote here breaks the
+                // parse on the client, which retries silently until it times out
+                // — so Unity answers correctly and the caller sees "did not answer
+                // in time". This branch had one and was the ONLY branch that did,
+                // which is why status worked in play mode and hung in edit mode.
+                !EditorApplication.isPlaying ? "not in play mode — send the start action" :
+                (mice > 1 || keebs > 1) ? "LEAKED VIRTUAL DEVICES — clicks may land at (0,0); leave play mode to clear them" :
+                "ready";
+
+            // Everything goes in `did`, because that is the field the caller
+            // actually SEES. A status action whose answer is only in fields the
+            // client does not render is a status action that reports nothing.
+            string did =
+                $"playMode={(EditorApplication.isPlaying ? "RUNNING" : "stopped")} · " +
+                $"scene={scene} · " +
+                $"compiling={(EditorApplication.isCompiling ? "yes" : "no")} · " +
+                $"busy={(_servingId != null || pending ? "yes" : "no")} · " +
+                $"virtual devices: {mice} mouse / {keebs} keyboard · " +
+                note;
+
+            // Belt as well as braces: whatever ends up in `did`, it must not be
+            // able to break the envelope it is embedded in.
+            did = did.Replace("\\", "/").Replace("\"", "'");
+
+            return "{\"ok\":true, \"did\":\"" + did + "\", \"screen\":[0,0], \"shots\":[], " +
+                   $"\"playMode\":{(EditorApplication.isPlaying ? "true" : "false")}, " +
+                   $"\"compiling\":{(EditorApplication.isCompiling ? "true" : "false")}, " +
+                   $"\"busy\":{(_servingId != null || pending ? "true" : "false")}, " +
+                   $"\"scene\":\"{scene}\", " +
+                   $"\"virtualMice\":{mice}, \"virtualKeyboards\":{keebs}}}";
         }
 
         /// <summary>Has a stamped wait outlived its deadline? Missing stamp counts
