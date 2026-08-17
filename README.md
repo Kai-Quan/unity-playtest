@@ -8,12 +8,32 @@ action maps, and whatever gates the game puts in front of them. Nothing here can
 click a button the player cannot reach, which is the entire point: a test that can
 reach further than a player is worse than no test.
 
+Three tools, and the split between them is the design:
+
+| | question it answers |
+|---|---|
+| **`play`** | what does a player experience |
+| **`inspect`** | what is actually in the scene — a developer's camera |
+| **`snapshot`** | where is everything, as numbers |
+
 ## Install
 
-Add to your project's `Packages/manifest.json`:
+Unity → **Window → Package Manager → + → Install package from git URL**:
+
+```
+https://github.com/Elegist-Studio/unity-playtest.git
+```
+
+or pin a release:
+
+```
+https://github.com/Elegist-Studio/unity-playtest.git#v0.1.0
+```
+
+or add it to `Packages/manifest.json` directly:
 
 ```json
-"com.elegist.playtest": "https://github.com/<you>/<repo>.git?path=/Packages/com.elegist.playtest"
+"com.elegist.playtest": "https://github.com/Elegist-Studio/unity-playtest.git#v0.1.0"
 ```
 
 or drop the folder into `Packages/` to embed it.
@@ -50,6 +70,54 @@ You get back:
 scales them, so what you see is what you click and the real resolution is something
 the agent never has to know.
 
+## Looking at the scene
+
+`play` answers what a player sees. It cannot answer whether a prop is floating,
+because a floating prop looks fine from the one angle the player happens to have.
+`inspect` is the developer's camera for exactly those questions.
+
+```
+{"tool":"inspect","action":"orbit","target":"Desk","angles":4}   a ring of angles
+{"tool":"inspect","action":"plan","from":"top","target":"Desk"}  orthographic
+{"tool":"inspect","action":"frame","target":"Desk","yaw":35}     one angle
+```
+
+**`orbit` is usually what you want.** Whatever stands in front of a thing from here
+is exactly what you cannot see past, and you do not know it is there until you have
+moved — so one angle cannot answer "show me this object".
+
+**`plan` is how you settle whether two things are touching.** Perspective is what
+makes that unanswerable from any normal angle; an orthographic view answers it in
+one picture.
+
+It works during play mode too, where it shows the live scene — the only way to see
+where something instantiated at runtime actually ended up. **Do not give it to an
+agent you have asked to playtest blind:** it sees through walls, and the only thing
+that report is worth comes from being unable to.
+
+## Reading the scene as numbers
+
+If a person edits the scene by hand and an agent also works on it, neither can see
+what the other did. `snapshot` is the shared record.
+
+```
+{"tool":"snapshot","root":"Level_01","out":"../design/level01.json"}
+{"tool":"snapshot","action":"diff","root":"Level_01","out":"../design/level01.json"}
+```
+
+`write` records every transform under a root, plus which mesh each object wears.
+`diff` reports **only what moved, was added or was deleted** since — which is the
+question you actually have when you come back to a scene someone else has touched.
+
+A snapshot is a **record, never an instruction**. Nothing here writes to the scene.
+That is the whole point: the generator-shaped alternative — a script holding every
+coordinate and re-asserting it — silently destroys hand edits the first time a
+person drags something.
+
+It refuses during play mode, unlike `inspect`, and for the opposite reason. In play
+every transform is whatever the game has done to it since, and a snapshot of that
+would look correct and be wrong.
+
 ## Telling it about your game
 
 The bridge knows nothing about your game and should stay that way. Publish whatever
@@ -71,3 +139,15 @@ prose. It lands under `probes` in `PlaytestBridge.DumpState()`.
   while every keypress is silently dropped.
 - One transport directory serves one editor. Running two projects at once? Set
   `UNITY_PLAYTEST_DIR` differently for each.
+
+## Known issues
+
+**Pointer position is not injected.** `Mouse.current.position` reads `(0,0)`
+whatever coordinate is sent, and a Mouse/Keyboard device pair leaks on every action,
+so `Mouse.current` ends up not being the device the click reaches. Keys and
+key-driven actions work; anything needing a cursor position — hover, uGUI buttons,
+world-space raycast clicks — does not. Being fixed.
+
+## Licence
+
+MIT — see [LICENSE.md](LICENSE.md).

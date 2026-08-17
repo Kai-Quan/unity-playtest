@@ -274,7 +274,7 @@ namespace Elegist.Playtest
                 // delta must be sent EXPLICITLY: a Mouse device does not derive it
                 // from position changes, so a drag built only from positions reads
                 // as zero movement. Everything that listens on delta rather than
-                // position — look, and the diorama's drag-to-turn — would silently
+                // position — mouse-look, drag-to-turn, camera orbits — would silently
                 // do nothing.
                 InputSystem.QueueStateEvent(_mouse, new MouseState { position = _cursor, delta = step }
                     .WithButton(MouseButton.Left, true));
@@ -520,8 +520,8 @@ namespace Elegist.Playtest
 
             // Free-form probes other systems contribute (see AddProbe). Values
             // are embedded as RAW JSON so a subsystem can publish structure —
-            // e.g. the diorama's world-space clickables with screen positions,
-            // which this project needs far more than uGUI buttons.
+            // e.g. a set of world-space clickables with their screen positions,
+            // which some games need far more than a list of uGUI buttons.
             sb.Append("  \"probes\": {");
             first = true;
             foreach (var kv in _probes)

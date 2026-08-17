@@ -2,9 +2,27 @@
   "name": "com.elegist.playtest",
   "version": "0.1.0",
   "displayName": "Playtest",
-  "description": "Lets an AI agent play your Unity game the way a person does — injected input through the real Input System, and screenshots back. Ships an MCP server so any agent can drive it. Knows nothing about your game; publish whatever state you want it to see with PlaytestBridge.AddProbe.",
+  "description": "Lets an AI agent play your Unity game the way a person does — injected input through the real Input System, and screenshots back. Ships an MCP server with three tools: play the game, look at the scene with a developer's camera, and read a layout as numbers. Knows nothing about your game; publish whatever state you want it to see with PlaytestBridge.AddProbe.",
   "unity": "6000.0",
-  "author": { "name": "Elegist Studio" },
+  "license": "MIT",
+  "author": {
+    "name": "Elegist Studio",
+    "url": "https://github.com/Elegist-Studio"
+  },
+  "keywords": [
+    "playtest",
+    "testing",
+    "automation",
+    "ai",
+    "agent",
+    "mcp",
+    "input-system",
+    "screenshot",
+    "editor-tools"
+  ],
+  "documentationUrl": "https://github.com/Elegist-Studio/unity-playtest#readme",
+  "changelogUrl": "https://github.com/Elegist-Studio/unity-playtest/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/Elegist-Studio/unity-playtest/blob/main/LICENSE.md",
   "dependencies": {
     "com.unity.inputsystem": "1.11.2",
     "com.unity.ugui": "2.0.0"

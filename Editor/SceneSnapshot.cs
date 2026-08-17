@@ -22,8 +22,8 @@ namespace Elegist.Playtest.EditorTools
     /// asking, a review shows exactly what changed, and a fresh clone has something
     /// to rebuild from — all without anything ever overwriting a transform.
     ///
-    ///     {"tool":"snapshot","root":"ExpeditionProto","out":"workbench/x/staging.json"}
-    ///     {"tool":"snapshot","action":"diff","root":"ExpeditionProto","out":"..."}
+    ///     {"tool":"snapshot","root":"Level_01","out":"../design/level01.json"}
+    ///     {"tool":"snapshot","action":"diff","root":"Level_01","out":"..."}
     ///
     /// REFUSES DURING PLAY MODE, unlike `inspect`, and for the opposite reason.
     /// Inspect answers "what does this look like right now", and runtime state is a
@@ -42,7 +42,7 @@ namespace Elegist.Playtest.EditorTools
 
             string rootName = PlaytestJson.Str(json, "root");
             if (string.IsNullOrEmpty(rootName))
-                return Fail("needs a root — the object whose subtree to record, e.g. \"ExpeditionProto\".");
+                return Fail("needs a root — the object whose subtree to record, e.g. \"Level_01\".");
 
             var root = GameObject.Find(rootName);
             if (root == null) return Fail($"no object called \"{rootName}\" in the open scene.");

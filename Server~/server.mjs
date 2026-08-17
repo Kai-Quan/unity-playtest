@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * Playtest MCP server — lets an agent PLAY Dear Suspect and SEE what happened.
+ * Playtest MCP server — lets an agent PLAY your Unity game and SEE what happened.
  *
  * The whole reason this exists rather than a script call: screenshots come back
  * INLINE as images in the tool result. With file paths the agent has to choose
  * to open them, and friction that discourages looking defeats the point of a
  * playtest. Here the pictures are simply there.
  *
- * Transport is a pair of files shared with Assets/Scripts/Editor/PlaytestServer.cs.
+ * Transport is a pair of files shared with Editor/PlaytestServer.cs.
  * No sockets, no threads, no dependencies — this file is dependency-free JSON-RPC
  * over stdio, so there is nothing to npm install and nothing to keep in sync.
  *
@@ -159,8 +159,8 @@ const SNAPSHOT_TOOL = {
     "A SNAPSHOT IS A RECORD, NEVER AN INSTRUCTION. Nothing here writes to the " +
     "scene. The file is how you find a coordinate without asking, how a commit " +
     "shows what moved, and how a fresh clone has something to rebuild from.\n\n" +
-    '  {"root":"ExpeditionProto","out":"workbench/x/staging.json"}\n' +
-    '  {"action":"diff","root":"ExpeditionProto","out":"workbench/x/staging.json"}\n\n' +
+    '  {"root":"Level_01","out":"workbench/x/staging.json"}\n' +
+    '  {"action":"diff","root":"Level_01","out":"workbench/x/staging.json"}\n\n' +
     "DIFF FIRST when you come back to a scene someone else has been editing. It " +
     "reports only what moved, was added or was deleted since the file was written, " +
     "which is the question you actually have — re-reading two hundred lines of " +
@@ -178,7 +178,7 @@ const SNAPSHOT_TOOL = {
       },
       root: {
         type: "string",
-        description: "Object whose subtree to record, e.g. \"ExpeditionProto\". Required.",
+        description: "Object whose subtree to record, e.g. \"Level_01\". Required.",
       },
       out: {
         type: "string",
@@ -290,7 +290,7 @@ process.stdin.on("data", async (chunk) => {
         reply(msg.id, {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "dear-suspect-playtest", version: "1.0.0" },
+          serverInfo: { name: "unity-playtest", version: "1.0.0" },
         });
       } else if (msg.method === "tools/list") {
         reply(msg.id, { tools: [TOOL, INSPECT_TOOL, SNAPSHOT_TOOL] });
