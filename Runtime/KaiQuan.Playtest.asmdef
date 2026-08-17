@@ -1,6 +1,6 @@
 {
-    "name": "Elegist.Playtest",
-    "rootNamespace": "Elegist.Playtest",
+    "name": "KaiQuan.Playtest",
+    "rootNamespace": "KaiQuan.Playtest",
     "references": [
         "Unity.InputSystem",
         "Unity.TextMeshPro",

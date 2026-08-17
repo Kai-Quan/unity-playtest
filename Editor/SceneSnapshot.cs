@@ -4,7 +4,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace Elegist.Playtest.EditorTools
+namespace KaiQuan.Playtest.EditorTools
 {
     /// <summary>
     /// The scene as NUMBERS — the twin of `inspect`, which is the scene as pictures.

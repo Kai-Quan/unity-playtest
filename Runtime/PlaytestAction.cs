@@ -4,7 +4,7 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 
-namespace Elegist.Playtest
+namespace KaiQuan.Playtest
 {
     /// <summary>
     /// A HUMAN-LEVEL play interface, for agents that should actually play the game

@@ -21,19 +21,19 @@ Three tools, and the split between them is the design:
 Unity → **Window → Package Manager → + → Install package from git URL**:
 
 ```
-https://github.com/Elegist-Studio/unity-playtest.git
+https://github.com/Kai-Quan/unity-playtest.git
 ```
 
 or pin a release:
 
 ```
-https://github.com/Elegist-Studio/unity-playtest.git#v0.1.0
+https://github.com/Kai-Quan/unity-playtest.git#v0.1.0
 ```
 
 or add it to `Packages/manifest.json` directly:
 
 ```json
-"com.elegist.playtest": "https://github.com/Elegist-Studio/unity-playtest.git#v0.1.0"
+"com.kaiquan.playtest": "https://github.com/Kai-Quan/unity-playtest.git#v0.1.0"
 ```
 
 or drop the folder into `Packages/` to embed it.

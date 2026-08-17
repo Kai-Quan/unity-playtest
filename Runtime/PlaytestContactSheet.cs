@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-namespace Elegist.Playtest
+namespace KaiQuan.Playtest
 {
     /// <summary>
     /// Tiles a run of game frames into ONE numbered picture.

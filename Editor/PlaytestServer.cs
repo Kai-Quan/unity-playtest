@@ -2,7 +2,7 @@ using System.IO;
 using UnityEditor;
 using UnityEngine;
 
-namespace Elegist.Playtest.EditorTools
+namespace KaiQuan.Playtest.EditorTools
 {
     /// <summary>
     /// Unity half of the playtest MCP bridge.
@@ -234,7 +234,7 @@ namespace Elegist.Playtest.EditorTools
         /// named it immediately.</summary>
         private static string Status()
         {
-            Elegist.Playtest.PlaytestBridge.CountVirtualDevices(out int mice, out int keebs);
+            KaiQuan.Playtest.PlaytestBridge.CountVirtualDevices(out int mice, out int keebs);
 
             bool pending = SessionState.GetString(PendingKey, "") != "";
             string scene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;

@@ -1,13 +1,13 @@
 {
-  "name": "com.elegist.playtest",
+  "name": "com.kaiquan.playtest",
   "version": "0.1.0",
   "displayName": "Playtest",
   "description": "Lets an AI agent play your Unity game the way a person does — injected input through the real Input System, and screenshots back. Ships an MCP server with three tools: play the game, look at the scene with a developer's camera, and read a layout as numbers. Knows nothing about your game; publish whatever state you want it to see with PlaytestBridge.AddProbe.",
   "unity": "6000.0",
   "license": "MIT",
   "author": {
-    "name": "Elegist Studio",
-    "url": "https://github.com/Elegist-Studio"
+    "name": "Kai Quan",
+    "url": "https://github.com/Kai-Quan"
   },
   "keywords": [
     "playtest",
@@ -20,9 +20,9 @@
     "screenshot",
     "editor-tools"
   ],
-  "documentationUrl": "https://github.com/Elegist-Studio/unity-playtest#readme",
-  "changelogUrl": "https://github.com/Elegist-Studio/unity-playtest/blob/main/CHANGELOG.md",
-  "licensesUrl": "https://github.com/Elegist-Studio/unity-playtest/blob/main/LICENSE.md",
+  "documentationUrl": "https://github.com/Kai-Quan/unity-playtest#readme",
+  "changelogUrl": "https://github.com/Kai-Quan/unity-playtest/blob/main/CHANGELOG.md",
+  "licensesUrl": "https://github.com/Kai-Quan/unity-playtest/blob/main/LICENSE.md",
   "dependencies": {
     "com.unity.inputsystem": "1.11.2",
     "com.unity.ugui": "2.0.0"

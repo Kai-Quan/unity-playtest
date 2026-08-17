@@ -9,7 +9,7 @@ using UnityEngine.InputSystem.LowLevel;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 
-namespace Elegist.Playtest
+namespace KaiQuan.Playtest
 {
     /// <summary>
     /// Lets an agent PLAY the game: inject real input, read the interactable

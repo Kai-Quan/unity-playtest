@@ -2,7 +2,7 @@
 using System.Text;
 using UnityEngine;
 
-namespace Elegist.Playtest
+namespace KaiQuan.Playtest
 {
     /// <summary>
     /// The smallest JSON reader that does this job: flat objects of strings,

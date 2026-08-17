@@ -4,7 +4,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
-namespace Elegist.Playtest.EditorTools
+namespace KaiQuan.Playtest.EditorTools
 {
     /// <summary>
     /// The DEVELOPER's camera, as a tool an agent can drive — the counterpart to

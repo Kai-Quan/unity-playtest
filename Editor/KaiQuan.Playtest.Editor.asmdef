@@ -1,8 +1,8 @@
 {
-    "name": "Elegist.Playtest.Editor",
-    "rootNamespace": "Elegist.Playtest.Editor",
+    "name": "KaiQuan.Playtest.Editor",
+    "rootNamespace": "KaiQuan.Playtest.Editor",
     "references": [
-        "Elegist.Playtest"
+        "KaiQuan.Playtest"
     ],
     "includePlatforms": [
         "Editor"
