@@ -34,11 +34,10 @@ First public release.
 - Input is forced to `IgnoreFocus`, so it keeps working while the editor is in the
   background. Without it the harness looks alive — screenshots keep arriving —
   while every keypress is silently dropped.
-
-### Known issues
-
-- **Pointer position is not injected.** `Mouse.current.position` reads `(0,0)`
-  regardless of the coordinate sent, and a Mouse/Keyboard device pair leaks on
-  every action, so `Mouse.current` is not the device the click reaches. Keys and
-  key-driven actions work; anything that needs a cursor position — hover, uGUI
-  buttons, world-space raycast clicks — does not. Fix in progress.
+- Virtual devices are swept before new ones are added. The Input System keeps its
+  device list across a domain reload while the bridge does not, so a recompile
+  during play would otherwise leak a mouse and a keyboard every time. Once enough
+  had piled up, `Mouse.current` resolved to a dead device whose position never
+  updated and every click landed at `(0,0)` — while screenshots kept arriving and
+  keys kept working, so the harness still looked alive. Both failures in this list
+  share that shape, which is why they are documented rather than merely fixed.

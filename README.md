@@ -139,14 +139,16 @@ prose. It lands under `probes` in `PlaytestBridge.DumpState()`.
   while every keypress is silently dropped.
 - One transport directory serves one editor. Running two projects at once? Set
   `UNITY_PLAYTEST_DIR` differently for each.
-
-## Known issues
-
-**Pointer position is not injected.** `Mouse.current.position` reads `(0,0)`
-whatever coordinate is sent, and a Mouse/Keyboard device pair leaks on every action,
-so `Mouse.current` ends up not being the device the click reaches. Keys and
-key-driven actions work; anything needing a cursor position — hover, uGUI buttons,
-world-space raycast clicks — does not. Being fixed.
+- **Its virtual devices are swept on every start**, and the failure that made that
+  necessary is worth knowing even though it is fixed. A script recompile during play
+  reloads the domain: the bridge dies and its device reference with it, but the Input
+  System KEEPS its device list — so a bare `AddDevice` leaks a mouse and a keyboard
+  per recompile. They pile up silently (one session reached ~190), and past some
+  point `Mouse.current` resolves to one of the dead ones, whose position never
+  updates. It presents in the nastiest possible way: screenshots keep arriving and
+  KEYS still work, so the harness looks perfectly alive while every click reads its
+  position as `(0,0)` and lands in the corner. If you ever see that, count the
+  `PlaytestMouse` entries in the Input Debugger.
 
 ## Licence
 
